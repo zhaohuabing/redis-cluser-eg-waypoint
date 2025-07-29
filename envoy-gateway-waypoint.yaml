@@ -1,0 +1,123 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: waypoint
+  namespace: envoy-gateway-system
+spec:
+  logging:
+    level:
+      default: debug
+  provider:
+    kubernetes:
+      envoyDeployment:
+        container:
+          image: envoyproxy/envoy:v1.34.4
+      envoyService:
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+              - name: fake-hbone-port
+                port: 15008
+                protocol: TCP
+                targetPort: 15008
+        type: ClusterIP
+    type: Kubernetes
+  telemetry:
+    accessLog: {}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  labels:
+    istio.io/dataplane-mode: ambient
+  name: redis-waypoint
+  namespace: default
+spec:
+  gatewayClassName: eg-waypoint
+  listeners:
+  - allowedRoutes:
+      namespaces:
+        from: All
+    name: redis
+    port: 6379
+    protocol: TCP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg-waypoint
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: waypoint
+    namespace: envoy-gateway-system
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: redis
+  namespace: default
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: redis-waypoint
+  rules:
+  - backendRefs:
+    - group: ""
+      kind: Service
+      name: redis
+      port: 6379
+      weight: 1
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyPatchPolicy
+metadata:
+  name: redis-envoy-patch-policy
+  namespace: default
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: redis-waypoint
+  type: JSONPatch
+  jsonPatches:
+  - name: default/redis-waypoint/redis
+    type: type.googleapis.com/envoy.config.listener.v3.Listener
+    operation:
+      op: replace
+      path: /filter_chains/0/filters/0
+      value:
+        name: envoy.filters.network.redis_proxy
+        typed_config:
+          '@type': type.googleapis.com/envoy.extensions.filters.network.redis_proxy.v3.RedisProxy
+          prefix_routes:
+            catch_all_route:
+              cluster: redis_cluster
+          settings:
+            enable_redirection: true
+            op_timeout: 5s
+          stat_prefix: redis_stats
+  - name: redis_cluster
+    type: type.googleapis.com/envoy.config.cluster.v3.Cluster
+    operation:
+      op: add
+      path: ""
+      value:
+        name: redis_cluster
+        connect_timeout: 10s
+        cluster_type:
+          name: envoy.clusters.redis
+        load_assignment:
+          cluster_name: redis-cluster
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: redis.external-redis # please replace with your redis service address
+                    port_value: 6379

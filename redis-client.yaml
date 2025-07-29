@@ -1,0 +1,37 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: redis-client
+  name: redis-client
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: redis-client
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/logLevel: debug
+      labels:
+        app: redis-client
+    spec:
+      containers:
+        - image: redis
+          imagePullPolicy: Always
+          name: redis-client
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: default
+  labels:
+    istio.io/use-waypoint: redis-waypoint
+spec:
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis-port
+      protocol: TCP
