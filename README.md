@@ -1,5 +1,7 @@
 # redis-cluser-eg-waypoint
 
+This is a simple example to show how to use Envoy Gateway (EG) waypoint to proxy the redis traffic in an Istio ambient mesh.
+
 1. install Istio Amibent
 
 ```
