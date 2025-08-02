@@ -87,6 +87,10 @@ spec:
           settings:
             enable_redirection: true
             op_timeout: 5s
+            dns_cache_config:
+              name: dns_cache_for_redis
+              dns_lookup_family: V4_ONLY
+              max_hosts: 100
           stat_prefix: redis_stats
   - name: redis_cluster
     type: type.googleapis.com/envoy.config.cluster.v3.Cluster
@@ -105,7 +109,7 @@ spec:
             - endpoint:
                 address:
                   socket_address:
-                    address: redis.external-redis # please replace this with your redis service address
+                    address: redis.external-redis # please replace with your redis service address
                     port_value: 6379
 ```
 
